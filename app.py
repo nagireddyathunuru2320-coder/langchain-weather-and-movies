@@ -100,12 +100,31 @@ def extract_text_response(agent_output: dict) -> str:
                 messages = value["messages"]
                 break
 
-    if messages:
+if messages:
         last = messages[-1]
-        return getattr(last, "content", str(last))
+        content = getattr(last, "content", last)
 
-    return str(agent_output)
+        # content can be a plain string OR a list of content blocks
+        # (e.g. [{"type": "thinking", ...}, "actual text"] or
+        #  [{"type": "thinking", ...}, {"type": "text", "text": "..."}])
+        if isinstance(content, str):
+            return content
 
+        if isinstance(content, list):
+            text_parts = []
+            for block in content:
+                if isinstance(block, str):
+                    text_parts.append(block)
+                elif isinstance(block, dict):
+                    if block.get("type") == "text":
+                        text_parts.append(block.get("text", ""))
+                    elif block.get("type") != "thinking":
+                        # fallback: grab any "text" key on unknown block types
+                        if "text" in block:
+                            text_parts.append(block["text"])
+            return "".join(text_parts).strip()
+
+        return str(content)
 formatted_agent_chain = (
     RunnableLambda(format_for_agent)
     | agent
